@@ -1,5 +1,8 @@
 #!/bin/bash
 
+INSTALL_DIR="json-server-auth-token"
+INSTALL_ABS_PATH="$PWD/$INSTALL_DIR"
+
 # Function to check if jq is installed
 check_jq() {
   if ! [ -x "$(command -v jq)" ]; then
@@ -47,11 +50,11 @@ check_npm() {
   else
     echo "npm is installed!"
   fi
-  npm init -y
-  npm install -g json-server@0.17.4
-  npm install -g jsonwebtoken
-  npm install json-server@0.17.4
-  npm install jsonwebtoken
+  # npm init -y
+  # npm install -g json-server@0.17.4
+  # npm install -g jsonwebtoken
+  # npm install json-server@0.17.4
+  # npm install jsonwebtoken
 }
 
 # Function to create configuration.json if missing
@@ -60,29 +63,31 @@ check_config() {
 
   if [ ! -f "$CONFIG_FILE" ]; then
     echo "Creating default $CONFIG_FILE..."
-    cat <<EOL > $CONFIG_FILE
+    cat <<'EOL' > $CONFIG_FILE
 {
-  "secretKey": "your-secret-key",
+  "secretKey": "secret",
   "tokenExpiration": "1h",
   "port": 3000
 }
 EOL
-    echo "$CONFIG_FILE created with default values. Please update 'secretKey' with a secure value."
-    exit 1
+    echo "$CONFIG_FILE created with default values."
   fi
 
-  # Check if secretKey is still the default value
-  SECRET_KEY=$(jq -r '.secretKey' "$CONFIG_FILE")
-  if [ "$SECRET_KEY" == "your-secret-key" ]; then
-    echo "Error: $CONFIG_FILE contains the default value for 'secretKey'. Please update it with a secure value."
-    exit 1
-  fi
+  # Validate required keys
+  REQUIRED_KEYS=("secretKey" "tokenExpiration" "port")
+  for key in "${REQUIRED_KEYS[@]}"; do
+    value=$(jq -r ".${key}" "$CONFIG_FILE")
+    if [ "$value" == "null" ] || [ -z "$value" ]; then
+      echo "Error: Missing required key '$key' in $CONFIG_FILE."
+      exit 1
+    fi
+  done
 
   echo "$CONFIG_FILE is valid!"
 }
 
-mkdir json-server-auth-token
-cd json-server-auth-token
+mkdir $INSTALL_DIR
+cd $INSTALL_DIR
 
 # Check for prerequisites
 check_jq
@@ -92,11 +97,12 @@ check_config
 
 # Initialize npm if package.json does not exist
 if [ ! -f "package.json" ]; then
-  npm init -y
+  npm init -y > '/dev/null' 2>&1
 fi
 
 # Install dependencies
-npm install fs json-server express jsonwebtoken body-parser
+echo "Installing dependencies..."
+npm install fs path json-server@0.17.4 express jsonwebtoken body-parser > '/dev/null' 2>&1
 
 # Create necessary files if they do not exist
 if [ ! -f "db.json" ]; then
@@ -105,12 +111,21 @@ if [ ! -f "db.json" ]; then
   "posts": [
     { "id": 1, "title": "Hello World", "author": "Mit" },
     { "id": 2, "title": "Demo Post", "author": "Jane Doe" }
-  ],
+  ]
+}
+EOL
+  echo "Created db.json"
+fi
+
+if [ ! -f "auth.json" ]; then
+  cat <<'EOL' > auth.json
+{
   "users": [
     { "id": 1, "username": "admin", "password": "password" }
   ]
 }
 EOL
+  echo "Created auth.json"
 fi
 
 if [ ! -f "server.js" ]; then
@@ -119,13 +134,18 @@ const jsonServer = require('json-server');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bodyParser = require('body-parser');
+const path = require('path');
 const fs = require('fs');
 
-// Load configuration
-const config = JSON.parse(fs.readFileSync('configuration.json'));
+// Load configuration relative to server.js
+const configPath = path.join(__dirname, 'configuration.json');
+const config = JSON.parse(fs.readFileSync(configPath));
 
 const app = express();
-const router = jsonServer.router('db.json');
+const dbPath = path.join(__dirname, 'db.json');
+const router = jsonServer.router(dbPath);
+const authPath = path.join(__dirname, 'auth.json');
+const auth = jsonServer.router(authPath);
 const middlewares = jsonServer.defaults();
 
 // Middleware
@@ -168,7 +188,7 @@ app.post('/login', (req, res) => {
   const { username, password } = req.body;
 
   // Replace with your user authentication logic
-  const user = router.db.get('users').find({ username, password }).value();
+  const user = auth.db.get('users').find({ username, password }).value();
 
   if (!user) {
     return res.status(401).json({ message: 'Invalid credentials' });
@@ -189,10 +209,11 @@ app.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`);
 });
 EOL
+  echo "Created server.js"
 fi
 
 # Instructions for starting the server
 echo "Setup complete!"
 echo ""
-echo -e "\033[1;32mTo start the server, run: \033[1;36mnode server.js\033[0m"
+echo -e "\033[1;32mTo start the server, run: \033[1;36mnode $INSTALL_DIR/server.js\033[0m"
 echo ""
