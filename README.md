@@ -160,8 +160,9 @@ curl -X GET http://localhost:3000/posts \
 ---
 
 ## Acknowledgments
-This project is inspired by the [json-server](https://github.com/typicode/json-server) by Typicode.
-
+This project is inspired by
+- [json-server](https://github.com/typicode/json-server) by Typicode.
+- [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken) by auth0
 ---
 
 ## License
